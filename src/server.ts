@@ -1,11 +1,13 @@
 import express from "express";
 import cookieParser from "cookie-parser";
 import { globalError } from "./middlewares/globalError";
+import authRoutes from "./routes/auth.routes";
 import { testPostgres } from "./db/postgres";
 import { connectMongo } from "./db/mongo";
 const app = express();
 app.use(express.json());
 app.use(cookieParser());
+app.use("/auth", authRoutes);
 app.get("/health", async (req, res, next) => {
   try {
     await testPostgres();
