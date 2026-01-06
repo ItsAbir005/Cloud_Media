@@ -7,17 +7,15 @@ const sub = redis.duplicate();
 
 export const startWS = (app: any) => {
   const server = http.createServer(app);
-  const io = new Server(server, {
-    cors: {
-      origin: "*",
-      methods: ["GET", "POST"],
-    },
-  });
+  const io = new Server(server,
+    { cors: { origin: "*" } }
+  );
 
   sub.subscribe("media_done");
-  sub.on("message", (channel, message) => {
+  sub.on("message", (_, message) => {
     io.emit("analysis_done", JSON.parse(message));
   });
 
-  server.listen(8081, () => console.log("WS running"));
+  server.listen(8081, () => console.log(" WS running on 8081"));
 };
+
