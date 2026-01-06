@@ -1,3 +1,11 @@
 import { Request, Response, NextFunction } from "express";
-export const asyncWrap = (fn: any) => (req: Request, res: Response, next: NextFunction) =>
-  Promise.resolve(fn(req, res, next)).catch(next);
+
+type AsyncFunction = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => Promise<any>;
+
+export const asyncWrap = (fn: AsyncFunction) => 
+  (req: Request, res: Response, next: NextFunction) =>
+    Promise.resolve(fn(req, res, next)).catch(next);

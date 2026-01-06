@@ -1,22 +1,34 @@
 import { asyncWrap } from "../middlewares/asyncWrap";
 import jwt from "jsonwebtoken";
 import { AppError } from "../errors/AppError";
-import { Request,Response } from "express";
+import { Request, Response } from "express";
 
 const ACCESS_SECRET = process.env.JWT_ACCESS!;
 const REFRESH_SECRET = process.env.JWT_REFRESH!;
 
+interface JwtPayload {
+  id: string;
+  email: string;
+  name: string;
+}
 
 export const login = asyncWrap(async (req: Request, res: Response) => {
-  const user = { id: "19", email: "abir@nit.ac.in", name: "Abir Maity" };
-  const accessToken = jwt.sign(user, ACCESS_SECRET, { expiresIn: "10m" });
-  const refreshToken = jwt.sign(user, REFRESH_SECRET, { expiresIn: "14d" });
+  const { email, password } = req.body;
+  
+  if (!email || !password) {
+    throw new AppError("ERR_VALIDATION", "Email and password required", null, 400);
+  }
+
+  const user: JwtPayload = { id: "19", email: "abir@nit.ac.in", name: "Abir Maity" };
+  
+  const accessToken = jwt.sign(user, ACCESS_SECRET, { expiresIn: "15m" });
+  const refreshToken = jwt.sign(user, REFRESH_SECRET, { expiresIn: "7d" });
 
   res.cookie("refreshToken", refreshToken, {
     httpOnly: true,
-    secure: false,
+    secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    path: "/auth/refresh"
+    maxAge: 7 * 24 * 60 * 60 * 1000 
   });
 
   res.json({ success: true, data: { accessToken } });
@@ -24,36 +36,48 @@ export const login = asyncWrap(async (req: Request, res: Response) => {
 
 export const refresh = asyncWrap(async (req: Request, res: Response) => {
   const token = req.cookies.refreshToken;
-  if (!token) throw new AppError("ERR_REFRESH_MISSING", "Refresh token missing", null, 401);
+  if (!token) {
+    throw new AppError("ERR_REFRESH_MISSING", "Refresh token missing", null, 401);
+  }
 
   try {
-    const user = jwt.verify(token, REFRESH_SECRET);
-    const newAccess = jwt.sign(user, ACCESS_SECRET, { expiresIn: "10m" });
-    const newRefresh = jwt.sign(user, REFRESH_SECRET, { expiresIn: "14d" });
+    const decoded = jwt.verify(token, REFRESH_SECRET) as JwtPayload;
+    const payload: JwtPayload = {
+      id: decoded.id,
+      email: decoded.email,
+      name: decoded.name
+    };
 
-    res.cookie("refreshToken", newRefresh, { httpOnly: true, secure: false, sameSite: "lax" });
+    const newAccess = jwt.sign(payload, ACCESS_SECRET, { expiresIn: "15m" });
+    const newRefresh = jwt.sign(payload, REFRESH_SECRET, { expiresIn: "7d" });
+
+    res.cookie("refreshToken", newRefresh, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
+
     res.json({ success: true, data: { accessToken: newAccess } });
-
   } catch {
     throw new AppError("ERR_REFRESH_INVALID", "Invalid refresh token", null, 401);
   }
 });
 
 export const me = asyncWrap(async (req: Request, res: Response) => {
-  const auth = req.headers.authorization;
-  if (!auth) throw new AppError("ERR_UNAUTH", "No token provided", null, 401);
-  const token = auth.split(" ")[1];
-
-  try {
-    const user = jwt.verify(token, ACCESS_SECRET);
-    res.json({ success: true, data: user });
-  } catch {
-    throw new AppError("ERR_ACCESS_INVALID", "Invalid access token", null, 401);
+  if (!req.user) {
+    throw new AppError("ERR_UNAUTH", "User not authenticated", null, 401);
   }
+
+  res.json({ success: true, data: req.user });
 });
 
 export const logout = asyncWrap(async (req: Request, res: Response) => {
-  res.clearCookie("refreshToken");
+  res.clearCookie("refreshToken", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax"
+  });
+  
   res.json({ success: true, message: "Logged out" });
 });
-
